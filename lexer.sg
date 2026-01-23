@@ -1,0 +1,136 @@
+pragma module;
+
+// Helpers
+
+fn is_dashdash(s: &string) -> bool {
+    if s.__len() != 2:uint { return false; }
+    return (s[0] == ((ASCII::HYPHEN to uint32)) && (s[1] == (ASCII::HYPHEN to uint32)));
+}
+
+// True if s starts with "--" and has more chars
+fn is_long_flag(s: &string) -> bool {
+    if s.__len() <= 2:uint { return false; }
+    return (s[0] == ((ASCII::HYPHEN to uint32)) && (s[1] == (ASCII::HYPHEN to uint32)));
+}
+
+// True if s starts with "-" and has more chars, but is not "--"
+fn is_short_flag_or_group(s: &string) -> bool {
+    if s.__len() < 2:uint { return false; }
+    if (s[0] != (ASCII::HYPHEN to uint32)) { return false; }
+    // "--" is not short
+    if ((s.__len() >= 2:uint) && (s[1] == (ASCII::HYPHEN to uint32))) { return false; }
+    return true;
+}
+
+// Split "--k=v" into ("--k", "v") if '=' exists after the prefix.
+// returns (left, right) where right can be nothing.
+fn split_long_eq(s: &string) -> (string, string?) {
+    // find '='
+    let eq_cp: uint32 = ASCII::EQUAL to uint32;
+    let n: int = s.__len() to int;
+    let mut i: int = 2; // skip leading "--"
+    while i < n {
+        if s[i] == eq_cp {
+            let left: string = s[[0..i]];
+            let right: string = s[[i + 1..n]];
+            return (left, Some(right));
+        }
+        i = i + 1;
+    }
+    return (s.__clone(), nothing);
+}
+
+// Parse a short token string like "-abc".
+// Rule v1:
+// - if length == 2 => single short
+// - if length  > 2 => expand into short group, except:
+//   - if first short is in `attach_value` set (future), then treat "-p8080" as Short('p') + Value("8080")
+// For lexer v1 we implement attached value as: if there are digits after first short, treat as value.
+// This is imperfect but good enough for v1; parser can refine later.
+fn lex_short_group(out: &mut Token[], s: &string) -> nothing {
+    let n: int = s.__len() to int;
+    if n == 2 {
+        // "-p"
+        out.push(Short(s[1]));
+        return nothing;
+    }
+
+    // heuristic: "-p8080" => Short('p') + Value("8080") if remaining looks like a value
+    // We'll treat it as attached value if the 3rd char is not a letter flag separator and there is no further '-'.
+    // Minimal heuristic: if char2 is digit, attach everything after short.
+    let cp2: uint32 = s[2];
+    if ((cp2 >= (ASCII::DIGIT_0 to uint32)) && (cp2 <= (ASCII::DIGIT_9 to uint32))) {
+        out.push(Short(s[1]));
+        let rest: string = s[[2..n]];
+        out.push(Value(rest));
+        return nothing;
+    }
+
+    // Otherwise expand "-abc" => -a -b -c
+    let mut i: int = 1;
+    while i < n {
+        out.push(Short(s[i]));
+        i = i + 1;
+    }
+    return nothing;
+}
+
+// Main lexer
+pub fn lex_argv(argv: string[]) -> Token[] {
+    let mut out: Token[] = [];
+    let mut stop: bool = false;
+
+    let argc: int = argv.__len() to int;
+    let mut i: int = 0;
+    while i < argc {
+        let a = argv[i];
+
+        if stop {
+            let c_a = clone(a);
+            out.push(Pos(c_a));
+            i = i + 1;
+            continue;
+        }
+
+        if is_dashdash(a) {
+            out.push(Stop());
+            stop = true;
+            i = i + 1;
+            continue;
+        }
+
+        if is_long_flag(a) {
+            let (left, right) = split_long_eq(a);
+            out.push(Long(left));
+            compare right {
+                Some(v) => out.push(Value(v));
+                nothing => {
+                    // try to seek next arg for value
+                    if ((i + 1) < argc) {
+                        let next = argv[i + 1];
+                        if !(is_dashdash(next) || is_short_flag_or_group(next) || is_long_flag(next)) {
+                            let c_next = clone(next);
+                            out.push(Value(c_next));
+                            i = i + 1;
+                        }
+                        // next arg is a flag, so we don't need to push a value
+                    }
+                }
+            };
+            i = i + 1;
+            continue;
+        }
+
+        if is_short_flag_or_group(a) {
+            lex_short_group(&mut out, a);
+            i = i + 1;
+            continue;
+        }
+
+        let c_a = clone(a);
+        out.push(Pos(c_a));
+        i = i + 1;
+    }
+
+    return out;
+}

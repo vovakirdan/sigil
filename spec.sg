@@ -1,0 +1,230 @@
+pragma module;
+
+pub type OptKind = uint8;
+pub enum OptKindEnum: OptKind = {
+    Bool = 0,
+    Int,
+    String,
+    ManyString,
+}
+
+pub type Key = {
+    id: uint32,
+    kind: OptKind,
+};
+
+pub type OptSpec = {
+    id: uint32,
+    kind: OptKind,
+    long: string,
+    short: string?,
+    help: string,
+    required: bool,
+
+    def_bool: bool,
+    def_int: int,
+    def_string: string?,
+};
+
+extern<OptSpec> {
+    pub fn default_int(self: &mut OptSpec, v: int) -> &mut OptSpec {
+        self.def_int = v;
+        return self;
+    }
+
+    pub fn default_string(self: &mut OptSpec, v: string) -> &mut OptSpec { 
+        self.def_string = Some(v);
+        return self;
+    }
+
+    pub fn required(self: &mut OptSpec) -> &mut OptSpec {
+        self.required = true;
+        return self;
+    }
+
+    pub fn help(self: &mut OptSpec, s: string) -> &mut OptSpec { 
+        self.help = s; 
+        return self;
+    }
+}
+
+pub type CmdSpec = {
+    name: string,
+    help: string,
+
+    // options declared in this command
+    opts: OptSpec[],
+
+    // subcommands
+    subs: CmdSpec[],
+
+    // Positionals policy
+    pos_many_id: uint32?,   // Key<string[]> id for "files...", or nothing
+    pos_many_name: string,  // for help
+
+    // id allocator
+    id_base: uint32,
+    next_local: uint32,
+};
+
+extern<CmdSpec> {
+    pub fn new(name: string, id_base: uint32) -> CmdSpec {
+        return CmdSpec {
+            name = name,
+            help = "",
+            opts = [],
+            subs = [],
+            pos_many_id = nothing,
+            pos_many_name = "",
+            id_base = id_base,
+            next_local = 0,
+        };
+    }
+
+    pub fn help(self: &mut CmdSpec, s: string) -> nothing {
+        self.help = s;
+    }
+
+    pub fn cmd(self: &mut CmdSpec, name: string, id_base: uint32) -> &mut CmdSpec {
+        let c = CmdSpec::new(name, id_base);
+        self.subs.push(c);
+        return self.subs.get_mut((self.subs.__len() to int) - 1);
+    }
+
+    fn next_id(self: &mut CmdSpec) -> uint32 {
+        let id = self.id_base + self.next_local;
+        self.next_local = self.next_local + 1;
+        return id;
+    }
+
+    pub fn flag_bool(self: &mut CmdSpec, long: string, short: string?) -> Key {
+        let id = self.next_id();
+        let sp = OptSpec {
+            id = id,
+            kind = OptKindEnum::Bool,
+            long = long,
+            short = short,
+            help = "",
+            required = false,
+            def_bool = false,
+            def_int = 0,
+            def_string = nothing,
+        };
+        self.opts.push(sp);
+        return Key { id = id, kind = OptKindEnum::Bool };
+    }
+
+    pub fn opt_int(self: &mut CmdSpec, long: string, short: string?) -> &mut OptSpec {
+        let id = self.next_id();
+        let sp = OptSpec {
+            id = id,
+            kind = OptKindEnum::Int,
+            long = long,
+            short = short,
+            help = "",
+            required = false,
+            def_bool = false,
+            def_int = 0,
+            def_string = nothing,
+        };
+        self.opts.push(sp);
+        return self.opts.get_mut((self.opts.__len() to int) - 1);
+    }
+
+    pub fn opt_string(self: &mut CmdSpec, long: string, short: string?) -> &mut OptSpec {
+        let id = self.next_id();
+        let sp = OptSpec {
+            id = id,
+            kind = OptKindEnum::String,
+            long = long,
+            short = short,
+            help = "",
+            required = false,
+            def_bool = false,
+            def_int = 0,
+            def_string = nothing,
+        };
+        self.opts.push(sp);
+        return self.opts.get_mut((self.opts.__len() to int) - 1);
+    }
+
+    pub fn positionals_many(self: &mut CmdSpec, name: string) -> Key {
+        // one per command in v1
+        let id = self.next_id(); 
+        self.pos_many_id = Some(id);
+        self.pos_many_name = name;
+        return { id = id, kind = OptKindEnum::ManyString };
+    }
+}
+
+pub type AppSpec = {
+    name: string,
+    root: CmdSpec,
+
+    // command block allocator
+    next_cmd_base: uint32,
+};
+
+const CMD_BLOCK: uint32 = 4096;
+
+// --- Builder API
+
+pub fn app(name: string) -> AppSpec {
+    return AppSpec {
+        name = name,
+        root = CmdSpec::new(name, 0:uint32),
+        next_cmd_base = CMD_BLOCK,
+    };
+}
+
+extern<AppSpec> {
+    fn alloc_cmd_base(self: &mut AppSpec) -> uint32 {
+        let base = self.next_cmd_base;
+        self.next_cmd_base = self.next_cmd_base + CMD_BLOCK;
+        return base;
+    }
+
+    pub fn cmd(self: &mut AppSpec, name: string) -> &mut CmdSpec {
+        let base = self.alloc_cmd_base();
+        let c = CmdSpec::new(name, base);
+        self.root.subs.push(c);
+        // return ref to the last element
+        let last = self.root.subs.get_mut((self.root.subs.__len() to int) - 1);
+        return last;
+    }
+
+    pub fn flag_bool(self: &mut AppSpec, long: string, short: string?) -> Key {
+        return self.root.flag_bool(long, short);
+    }
+
+    pub fn opt_int(self: &mut AppSpec, long: string, short: string?) -> &mut OptSpec {
+        return self.root.opt_int(long, short);
+    }
+
+    pub fn opt_string(self: &mut AppSpec, long: string, short: string?) -> &mut OptSpec {
+        return self.root.opt_string(long, short);
+    }
+
+    pub fn positionals_many(self: &mut AppSpec, name: string) -> Key {
+        return self.root.positionals_many(name);
+    }
+}
+
+// --- helpers
+
+fn parse_short(s: string?) -> uint32? {
+    let out: uint32? = compare s {
+        nothing => return nothing;
+        Some(v) => {
+            // accept "-p" or "p"
+            if v.__len() == 2:uint && v[0] == (ASCII::HYPHEN to uint) to uint32 {
+                return Some(v[1]);
+            }
+            if v.__len() == 1:uint {
+                return Some(v[0]);
+            }
+            return nothing;
+        }
+    };
+    return out;
+}

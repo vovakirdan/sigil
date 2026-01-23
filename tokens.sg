@@ -1,0 +1,9 @@
+pragma module;
+
+pub tag Long(string);
+pub tag Short(uint32);
+pub tag Value(string);
+pub tag Stop();
+pub tag Pos(string);
+pub type Token = Long(string) | Short(uint32) | Value(string) | Stop() | Pos(string);
+

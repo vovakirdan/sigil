@@ -1,0 +1,15 @@
+pragma module;
+
+pub tag Help(string);
+pub tag ErrorDiag(Error);
+
+pub type ParseDiag = Help(string) | ErrorDiag(Error);
+
+extern<ParseDiag> {
+    pub fn pretty(self: &ParseDiag) -> string! {
+        return compare self {
+            Help(s) => clone(s);
+            ErrorDiag(e) => clone(e);
+        };
+    }
+}

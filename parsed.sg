@@ -1,0 +1,95 @@
+pragma module;
+
+pub tag VBool(bool);
+pub tag VInt(int);
+pub tag VString(string);
+pub tag VManyString(string[]);
+pub type ValueType = VBool(bool) | VInt(int) | VString(string) | VManyString(string[]);
+
+pub type Parsed = {
+    cmd: string,
+    values: Map<uint32, ValueType>,
+};
+
+@hidden fn clone_array_string(v: &string[]) -> string[] {
+    let mut res: string[] = Array::<string>::with_len(len(v));
+    let mut i: int = 0;
+    while (i < (len(v) to int)) {
+        res.__index_set(i, clone(v[i])); // todo: resolve arr[i] = ... -> res.__index_set(i, ...) correctly
+        i = i + 1;
+    }
+    return res;
+}
+
+extern<Parsed> {
+    pub fn set_bool(self: &mut Parsed, id: uint32, v: bool) -> nothing {
+        let _ = self.values.insert(id, VBool(v));
+        return nothing;
+    }
+
+    pub fn set_int(self: &mut Parsed, id: uint32, v: int) -> nothing {
+        let _ = self.values.insert(id, VInt(v));
+        return nothing;
+    }
+
+    pub fn set_string(self: &mut Parsed, id: uint32, v: string) -> nothing {
+        let _ = self.values.insert(id, VString(v));
+        return nothing;
+    }
+
+    pub fn set_many_string(self: &mut Parsed, id: uint32, v: string[]) -> nothing {
+        let _ = self.values.insert(id, VManyString(v));
+        return nothing;
+    }
+
+    pub fn get_bool(self: &Parsed, k: Key) -> bool {
+        let res = self.values.get_ref(&k.id);
+        return compare res {
+            Some(entry) => compare entry {
+                VBool(v) => v;
+                finally => false;
+            };
+            nothing => false;
+        };
+    }
+
+    pub fn get_int(self: &Parsed, k: Key) -> int! {
+        let res = self.values.get_ref(&k.id);
+        return compare res {
+            Some(entry) => compare entry {
+                VInt(v) => { let out: int! = Success(clone(v)); out; };
+                finally => Error { message = "expected int", code = 1 to uint };
+            };
+            nothing => Error { message = "expected int", code = 1 to uint };
+        };
+    }
+
+    pub fn get_string(self: &Parsed, k: Key) -> string! {
+        let res = self.values.get_ref(&k.id);
+        return compare res {
+            Some(entry) => compare entry {
+                VString(v) => { let out: string! = Success(clone(v)); out; };
+                finally => Error { message = "expected string", code = 1 to uint };
+            };
+            nothing => Error { message = "expected string", code = 1 to uint };
+        };
+    }
+
+    pub fn get_many(self: &Parsed, k: Key) -> string[]! {
+        let res = self.values.get_ref(&k.id);
+        return compare res {
+            Some(entry) => compare entry {
+                VManyString(v) => { 
+                    let out: string[]! = Success(clone_array_string(v)); 
+                    out;
+                };
+                finally => Error { message = "expected many string", code = 1 to uint };
+            };
+            nothing => { let out: string[] = []; Success(out); };
+        };
+    }
+
+    pub fn is_it(self: &Parsed, name: string) -> bool {
+        return self.cmd == name;
+    }
+}
