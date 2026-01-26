@@ -171,9 +171,10 @@ const CMD_BLOCK: uint32 = 4096;
 
 extern<AppSpec> {
     pub fn new(name: string) -> AppSpec {
+        let root_name = clone(name);
         return AppSpec {
             name = name,
-            root = CmdSpec::new(name, 0:uint32),
+            root = CmdSpec::new(root_name, 0:uint32),
             next_cmd_base = CMD_BLOCK,
         };
     }

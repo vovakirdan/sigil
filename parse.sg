@@ -149,7 +149,7 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
 
     // merged view: root opts + cmd opts
     // v0 simplest: check root first, then cmd
-    let mut out: Parsed = { cmd = cmd_name, values = [] };
+    let mut out: Parsed = { cmd = cmd_name, values = Map::<uint32, ValueType>.new() };
 
     apply_defaults(&mut out, app.root);
     apply_defaults(&mut out, cmd);
