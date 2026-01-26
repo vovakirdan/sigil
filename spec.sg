@@ -169,15 +169,15 @@ const CMD_BLOCK: uint32 = 4096;
 
 // --- Builder API
 
-pub fn app(name: string) -> AppSpec {
-    return AppSpec {
-        name = name,
-        root = CmdSpec::new(name, 0:uint32),
-        next_cmd_base = CMD_BLOCK,
-    };
-}
-
 extern<AppSpec> {
+    pub fn new(name: string) -> AppSpec {
+        return AppSpec {
+            name = name,
+            root = CmdSpec::new(name, 0:uint32),
+            next_cmd_base = CMD_BLOCK,
+        };
+    }
+
     fn alloc_cmd_base(self: &mut AppSpec) -> uint32 {
         let base = self.next_cmd_base;
         self.next_cmd_base = self.next_cmd_base + CMD_BLOCK;

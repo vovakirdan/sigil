@@ -1,0 +1,318 @@
+pragma module;
+
+fn is_help_long(s: &string) -> bool {
+    return s == "--help";
+}
+
+fn is_help_short(s: &uint32) -> bool {
+    return (s == (ASCII::H to uint32)) || (s == (ASCII::LOWER_H to uint32));
+}
+
+// Find subcommand by name (one level v0)
+fn find_sub(root: &CmdSpec, name: &string) -> Option<&CmdSpec> {
+    for i in 0..(len(root.subs) to int) {
+        if root.subs[i].name == name {
+            return root.subs[i];
+        }
+    }
+    return nothing;
+}
+
+fn find_opt_long(cmd: &CmdSpec, long: &string) -> Option<&OptSpec> {
+    for i in 0..(len(cmd.opts) to int) {
+        if cmd.opts[i].long == long {
+            return cmd.opts[i];
+        }
+    }
+    return nothing;
+}
+
+fn find_opt_short(cmd: &CmdSpec, short: uint32) -> Option<&OptSpec> {
+    for i in 0..(len(cmd.opts) to int) {
+        let s = cmd.opts[i].short;
+        compare s {
+            Some(ss) => {
+                // accept "-p" or "p"
+                if ss.__len() == 2:uint && ss[0] == (ASCII::HYPHEN to uint32) && ss[1] == short {
+                    return cmd.opts[i];
+                }
+                if ss.__len() == 1:uint && ss[0] == short {
+                    return cmd.opts[i];
+                }
+            }
+            nothing => {}
+        };
+    }
+    return nothing;
+}
+
+fn usage_stub(app: &AppSpec) -> string {
+    // v0: later pretty-print full usage
+    let mut out: string = "usage: " + app.name + " [command] [options] [--] [args...]";
+    if len(app.root.subs) > 0:uint {
+        out = out + "\ncommands:\n";
+        for i in 0..(len(app.root.subs) to int) {
+            out = out + "  " + app.root.subs[i].name + "\n";
+        }
+    }
+    return out;
+}
+
+// apply defaults (root + cmd)
+fn apply_defaults(p: &mut Parsed, c: &CmdSpec) -> nothing {
+    for i in 0..(len(c.opts) to int) {
+        let o = c.opts[i];
+        compare o.kind {
+            OptKindEnum::Bool => { p.set_bool(o.id, o.def_bool); }
+            OptKindEnum::Int =>  { p.set_int(o.id, o.def_int); }
+            OptKindEnum::String => {
+                compare o.def_string {
+                    Some(s) => p.set_string(o.id, clone(s));
+                    nothing => {}
+                }
+            }
+            finally => {}
+        }
+    }
+    return nothing;
+}
+
+// helper: find opt in merged scope
+fn find_long_merged(root: &CmdSpec, cmd: &CmdSpec, name: &string) -> Option<&OptSpec> {
+    let a = find_opt_long(cmd, name);
+    compare a { 
+        Some(x) => return x;
+        nothing => {}
+    };
+    return find_opt_long(root, name);
+}
+
+fn find_short_merged(root: &CmdSpec, cmd: &CmdSpec, ch: uint32) -> Option<&OptSpec> {
+    let a = find_opt_short(cmd, ch);
+    compare a { Some(x) => return x; nothing => {} };
+    return find_opt_short(root, ch);
+}
+
+// required checks (root + cmd)
+fn check_required(p: &Parsed, c: &CmdSpec) -> ParseDiag? {
+    for i in 0..(len(c.opts) to int) {
+        let o = c.opts[i];
+        if !o.required { continue; }
+        // For v0: required means value must exist in parsed store.
+        // Since defaults are applied, required mainly relevant for String without default.
+        // We'll approximate: check presence in store by attempting get based on kind.
+        compare o.kind {
+            OptKindEnum::String => {
+                // if no entry => missing
+                // (we didn't expose has(id), so simplest: try get_string via a temporary Key)
+                let k: Key = { id = o.id, kind = o.kind };
+                let r = p.get_string(k);
+                compare r { 
+                    Success(_) => {};
+                    finally => {
+                        let missing_required_err = Error { message = "missing required " + o.long, code = 1:uint };
+                        return Some(ErrorDiag(missing_required_err));
+                    }
+                }
+            }
+            finally => {}
+        }
+    }
+    return nothing;
+}
+
+pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
+    let toks: Token[] = lex_argv(argv);
+
+    // determine command (one-level): first Pos token that matches a subcommand
+    let mut cmd_name: string = clone(app.root.name);
+    let mut cmd = app.root; // copy v0; ok since we only read
+    let mut start_idx: int = 0;
+
+    for i in 0..(len(toks) to int) {
+        compare toks[i] {
+            Pos(s) => {
+                let sub = find_sub(app.root, s);
+                compare sub {
+                    Some(sc) => {
+                        cmd = sc;
+                        cmd_name = clone(sc.name);
+                        start_idx = i + 1;
+                        break;
+                    }
+                    nothing => { /* keep looking; command might not exist */ }
+                }
+            }
+            finally => {}
+        }
+    }
+
+    // merged view: root opts + cmd opts
+    // v0 simplest: check root first, then cmd
+    let mut out: Parsed = { cmd = cmd_name, values = [] };
+
+    apply_defaults(&mut out, app.root);
+    apply_defaults(&mut out, cmd);
+
+    // parse tokens from start_idx (after command name if present)
+    let n: int = len(toks) to int;
+    let mut i: int = start_idx;
+    let mut stop: bool = false;
+
+    while i < n {
+        let t = toks[i];
+
+        if stop {
+            // everything after Stop is positional
+            // send into cmd positionals_many if configured, else ignore for v0
+            compare cmd.pos_many_id {
+                Some(pid) => {
+                    let arr_str = compare t { 
+                        Pos(s) => { 
+                            let mut arr_str = Array::<string>::with_len(1:uint);
+                            arr_str.push(s);
+                            arr_str;
+                        };
+                        finally => { Array::<string>::with_len(0:uint); };
+                    };
+                    out.set_many_string(pid, arr_str);
+                };
+                nothing => {};
+            };
+            i = i + 1;
+            continue;
+        }
+
+        compare t {
+            Stop() => { stop = true; i = i + 1; continue; }
+
+            Long(name) => {
+                if is_help_long(name) {
+                    return Help(usage_stub(app));
+                }
+
+                let opt = find_long_merged(app.root, cmd, name);
+                compare opt {
+                    nothing => {
+                        let unknown_flag_err = Error { message = "unknown flag: " + name, code = 1:uint };
+                        return ErrorDiag(unknown_flag_err);
+                    }
+                    Some(o) => {
+                        compare o.kind {
+                            OptKindEnum::Bool => {
+                                out.set_bool(o.id, true);
+                                i = i + 1;
+                                continue;
+                            }
+                            OptKindEnum::Int => {
+                                // expect Value next
+                                if ((i + 1) >= n) { 
+                                    let missing_value_err = Error { message = "missing value for " + name, code = 1:uint };
+                                    return ErrorDiag(missing_value_err); 
+                                }
+                                let vtok = toks[i + 1];
+                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
+                                // parse int
+                                let r = sval;
+                                if !is_int(sval) {
+                                    let invalid_int_err = Error { message = "invalid int for " + name, code = 1:uint };
+                                    return ErrorDiag(invalid_int_err);
+                                }
+                                let int_val = clone(sval) to int;
+                                out.set_int(o.id, int_val);
+                                i = i + 2;
+                                continue;
+                            }
+                            OptKindEnum::String => {
+                                if ((i + 1) >= n) {
+                                    let missing_value_err = Error { message = "missing value for " + name, code = 1:uint };
+                                    return ErrorDiag(missing_value_err);
+                                }
+                                let vtok = toks[i + 1];
+                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
+                                out.set_string(o.id, clone(sval));
+                                i = i + 2;
+                                continue;
+                            }
+                            finally => { i = i + 1; continue; }
+                        }
+                    }
+                }
+            }
+
+            Short(ch) => {
+                if is_help_short(ch) {
+                    return Help(usage_stub(app));
+                }
+                let opt = find_short_merged(app.root, cmd, ch);
+                compare opt {
+                    nothing => {
+                        return ErrorDiag(Error { message = "unknown short flag", code = 1 to uint });
+                    }
+                    Some(o) => {
+                        compare o.kind {
+                            OptKindEnum::Bool => { out.set_bool(o.id, true); i = i + 1; continue; }
+                            OptKindEnum::Int => {
+                                if ((i + 1) >= n) { return ErrorDiag(Error { message = "missing value for -<flag>", code = 1 to uint }); }
+                                let vtok = toks[i + 1];
+                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
+                                if !is_int(sval) {
+                                    let invalid_int_err = Error { message = "invalid int for -<flag>", code = 1:uint };
+                                    return ErrorDiag(invalid_int_err);
+                                }
+                                let int_val = clone(sval) to int;
+                                out.set_int(o.id, int_val);
+                                i = i + 2;
+                                continue;
+                            }
+                            OptKindEnum::String => {
+                                if ((i + 1) >= n) { return ErrorDiag(Error { message = "missing value", code = 1 to uint }); }
+                                let vtok = toks[i + 1];
+                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
+                                out.set_string(o.id, clone(sval));
+                                i = i + 2;
+                                continue;
+                            }
+                            finally => { i = i + 1; continue; }
+                        }
+                    }
+                }
+            }
+
+            Pos(s) => {
+                // normal positional
+                compare cmd.pos_many_id {
+                    Some(pid) => {
+                        let mut arr_str = Array::<string>::with_len(1:uint);
+                        arr_str.push(s);
+                        out.set_many_string(pid, arr_str);
+                    }
+                    nothing => {}
+                };
+                i = i + 1;
+                continue;
+            }
+
+            Value(s) => {
+                // stray value: treat as positional in v0
+                compare cmd.pos_many_id {
+                    Some(pid) => {
+                        let mut arr_str = Array::<string>::with_len(1:uint);
+                        arr_str.push(s);
+                        out.set_many_string(pid, arr_str);
+                    }
+                    nothing => {}
+                };
+                i = i + 1;
+                continue;
+            }
+        }
+    }
+
+    let r1 = check_required(&out, app.root);
+    compare r1 { Some(d) => return d; nothing => {} };
+    let r2 = check_required(&out, cmd);
+    compare r2 { Some(d) => return d; nothing => {} };
+
+    return Success(out);
+}
