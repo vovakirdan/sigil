@@ -2,6 +2,7 @@
 [package]
 name = "sigil"
 version = "0.1.0"
+root = "."
 
 [run]
 main = "main.sg"
