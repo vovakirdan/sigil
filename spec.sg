@@ -114,7 +114,7 @@ extern<CmdSpec> {
         return Key { id = id, kind = OptKindEnum::Bool };
     }
 
-    pub fn opt_int(self: &mut CmdSpec, long: string, short: string?) -> &mut OptSpec {
+    pub fn opt_int(self: &mut CmdSpec, long: string, short: string?, default_value: int) -> Key {
         let id = self.next_id();
         let sp = OptSpec {
             id = id,
@@ -124,14 +124,14 @@ extern<CmdSpec> {
             help = "",
             required = false,
             def_bool = false,
-            def_int = 0,
+            def_int = default_value,
             def_string = nothing,
         };
         self.opts.push(sp);
-        return self.opts.get_mut((self.opts.__len() to int) - 1);
+        return Key { id = id, kind = OptKindEnum::Int };
     }
 
-    pub fn opt_string(self: &mut CmdSpec, long: string, short: string?) -> &mut OptSpec {
+    pub fn opt_string(self: &mut CmdSpec, long: string, short: string?, default_value: string?) -> Key {
         let id = self.next_id();
         let sp = OptSpec {
             id = id,
@@ -142,10 +142,10 @@ extern<CmdSpec> {
             required = false,
             def_bool = false,
             def_int = 0,
-            def_string = nothing,
+            def_string = default_value,
         };
         self.opts.push(sp);
-        return self.opts.get_mut((self.opts.__len() to int) - 1);
+        return Key { id = id, kind = OptKindEnum::String };
     }
 
     pub fn positionals_many(self: &mut CmdSpec, name: string) -> Key {
@@ -198,12 +198,12 @@ extern<AppSpec> {
         return self.root.flag_bool(long, short);
     }
 
-    pub fn opt_int(self: &mut AppSpec, long: string, short: string?) -> &mut OptSpec {
-        return self.root.opt_int(long, short);
+    pub fn opt_int(self: &mut AppSpec, long: string, short: string?, default_value: int) -> Key {
+        return self.root.opt_int(long, short, default_value);
     }
 
-    pub fn opt_string(self: &mut AppSpec, long: string, short: string?) -> &mut OptSpec {
-        return self.root.opt_string(long, short);
+    pub fn opt_string(self: &mut AppSpec, long: string, short: string?, default_value: string?) -> Key {
+        return self.root.opt_string(long, short, default_value);
     }
 
     pub fn positionals_many(self: &mut AppSpec, name: string) -> Key {
