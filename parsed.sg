@@ -12,10 +12,10 @@ pub type Parsed = {
 };
 
 @hidden fn clone_array_string(v: &string[]) -> string[] {
-    let mut res: string[] = Array::<string>::with_len(len(v));
+    let mut res: string[] = [];
     let mut i: int = 0;
     while (i < (len(v) to int)) {
-        res.__index_set(i, clone(v[i])); // todo: resolve arr[i] = ... -> res.__index_set(i, ...) correctly
+        res.push(clone(v[i]));
         i = i + 1;
     }
     return res;

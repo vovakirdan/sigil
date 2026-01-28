@@ -77,6 +77,29 @@ fn apply_defaults(p: &mut Parsed, c: &CmdSpec) -> nothing {
     return nothing;
 }
 
+fn push_pos_many(p: &mut Parsed, pid: uint32, s: &string) -> nothing {
+    let mut updated: bool = false;
+    {
+        let existing = p.values.get_mut(&pid);
+        compare existing {
+            Some(entry) => compare entry {
+                VManyString(arr) => {
+                    arr.push(clone(s));
+                    updated = true;
+                }
+                finally => {}
+            };
+            nothing => {}
+        };
+    }
+    if !updated {
+        let mut arr: string[] = [];
+        arr.push(clone(s));
+        let _ = p.values.insert(pid, VManyString(arr));
+    }
+    return nothing;
+}
+
 // helper: find opt in merged scope
 fn find_long_merged(root: &CmdSpec, cmd: &CmdSpec, name: &string) -> Option<&OptSpec> {
     let a = find_opt_long(cmd, name);
@@ -167,15 +190,11 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
             // send into cmd positionals_many if configured, else ignore for v0
             compare cmd.pos_many_id {
                 Some(pid) => {
-                    let arr_str = compare t { 
-                        Pos(s) => { 
-                            let mut arr_str = Array::<string>::with_len(1:uint);
-                            arr_str.push(s);
-                            arr_str;
-                        };
-                        finally => { Array::<string>::with_len(0:uint); };
+                    compare t {
+                        Pos(s) => { push_pos_many(&mut out, pid, s); }
+                        Value(s) => { push_pos_many(&mut out, pid, s); }
+                        finally => {}
                     };
-                    out.set_many_string(pid, arr_str);
                 };
                 nothing => {};
             };
@@ -283,9 +302,7 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                 // normal positional
                 compare cmd.pos_many_id {
                     Some(pid) => {
-                        let mut arr_str = Array::<string>::with_len(1:uint);
-                        arr_str.push(s);
-                        out.set_many_string(pid, arr_str);
+                        push_pos_many(&mut out, pid, s);
                     }
                     nothing => {}
                 };
@@ -297,9 +314,7 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                 // stray value: treat as positional in v0
                 compare cmd.pos_many_id {
                     Some(pid) => {
-                        let mut arr_str = Array::<string>::with_len(1:uint);
-                        arr_str.push(s);
-                        out.set_many_string(pid, arr_str);
+                        push_pos_many(&mut out, pid, s);
                     }
                     nothing => {}
                 };
