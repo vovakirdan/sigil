@@ -58,6 +58,14 @@ fn usage_stub(app: &AppSpec) -> string {
     return out;
 }
 
+fn token_string(tok: &Token) -> string {
+    return compare tok {
+        Value(s) => clone(s);
+        Pos(s) => clone(s);
+        finally => "";
+    };
+}
+
 // apply defaults (root + cmd)
 fn apply_defaults(p: &mut Parsed, c: &CmdSpec) -> nothing {
     for i in 0..(len(c.opts) to int) {
@@ -230,14 +238,13 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                                     return ErrorDiag(missing_value_err); 
                                 }
                                 let vtok = toks[i + 1];
-                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
+                                let sval = token_string(vtok);
                                 // parse int
-                                let r = sval;
-                                if !is_int(sval) {
+                                if !is_int(&sval) {
                                     let invalid_int_err = Error { message = "invalid int for " + name, code = 1:uint };
                                     return ErrorDiag(invalid_int_err);
                                 }
-                                let int_val = clone(sval) to int;
+                                let int_val = sval to int;
                                 out.set_int(o.id, int_val);
                                 i = i + 2;
                                 continue;
@@ -248,8 +255,8 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                                     return ErrorDiag(missing_value_err);
                                 }
                                 let vtok = toks[i + 1];
-                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
-                                out.set_string(o.id, clone(sval));
+                                let sval = token_string(vtok);
+                                out.set_string(o.id, sval);
                                 i = i + 2;
                                 continue;
                             }
@@ -274,12 +281,12 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                             OptKindEnum::Int => {
                                 if ((i + 1) >= n) { return ErrorDiag(Error { message = "missing value for -<flag>", code = 1 to uint }); }
                                 let vtok = toks[i + 1];
-                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
-                                if !is_int(sval) {
+                                let sval = token_string(vtok);
+                                if !is_int(&sval) {
                                     let invalid_int_err = Error { message = "invalid int for -<flag>", code = 1:uint };
                                     return ErrorDiag(invalid_int_err);
                                 }
-                                let int_val = clone(sval) to int;
+                                let int_val = sval to int;
                                 out.set_int(o.id, int_val);
                                 i = i + 2;
                                 continue;
@@ -287,8 +294,8 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                             OptKindEnum::String => {
                                 if ((i + 1) >= n) { return ErrorDiag(Error { message = "missing value", code = 1 to uint }); }
                                 let vtok = toks[i + 1];
-                                let sval = compare vtok { Value(s) => s; Pos(s) => s; finally => {let empty_str = ""; &empty_str;}; };
-                                out.set_string(o.id, clone(sval));
+                                let sval = token_string(vtok);
+                                out.set_string(o.id, sval);
                                 i = i + 2;
                                 continue;
                             }

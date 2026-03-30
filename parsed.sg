@@ -57,7 +57,7 @@ extern<Parsed> {
         let res = self.values.get_ref(&k.id);
         return compare res {
             Some(entry) => compare entry {
-                VInt(v) => { let out: int! = Success(clone(v)); out; };
+                VInt(v) => Success(clone(v));
                 finally => Error { message = "expected int", code = 1 to uint };
             };
             nothing => Error { message = "expected int", code = 1 to uint };
@@ -68,7 +68,7 @@ extern<Parsed> {
         let res = self.values.get_ref(&k.id);
         return compare res {
             Some(entry) => compare entry {
-                VString(v) => { let out: string! = Success(clone(v)); out; };
+                VString(v) => Success(clone(v));
                 finally => Error { message = "expected string", code = 1 to uint };
             };
             nothing => Error { message = "expected string", code = 1 to uint };
@@ -79,13 +79,13 @@ extern<Parsed> {
         let res = self.values.get_ref(&k.id);
         return compare res {
             Some(entry) => compare entry {
-                VManyString(v) => { 
-                    let out: string[]! = Success(clone_array_string(v)); 
-                    out;
-                };
+                VManyString(v) => Success(clone_array_string(v));
                 finally => Error { message = "expected many string", code = 1 to uint };
             };
-            nothing => { let out: string[] = []; Success(out); };
+            nothing => {
+                let out: string[] = [];
+                ret Success(out);
+            };
         };
     }
 
