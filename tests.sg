@@ -1,0 +1,98 @@
+pragma module;
+
+import stdlib/directives/test;
+
+/// test:
+/// Defaults:
+/// let mut app = AppSpec::new("tool");
+/// let verbose = app.flag_bool("--verbose", Some("-v"));
+/// let port = app.opt_int("--port", Some("-p"), 8080);
+/// let name = app.opt_string("--name", Some("-n"), Some("World"));
+/// let args: string[] = [];
+/// compare parse(args, &app) {
+///     Success(parsed) => {
+///         test.assert(!parsed.get_bool(verbose));
+///         test.eq::<int>(parsed.get_int(port).safe(), 8080);
+///         test.eq::<string>(parsed.get_string(name).safe(), "World");
+///     }
+///     finally => test.fail("defaults parse failed");
+/// };
+///
+/// LongValues:
+/// let mut app = AppSpec::new("tool");
+/// let port = app.opt_int("--port", Some("-p"), 8080);
+/// let name = app.opt_string("--name", Some("-n"), nothing);
+/// let args: string[] = ["--port", "9090", "--name=Ada"];
+/// compare parse(args, &app) {
+///     Success(parsed) => {
+///         test.eq::<int>(parsed.get_int(port).safe(), 9090);
+///         test.eq::<string>(parsed.get_string(name).safe(), "Ada");
+///     }
+///     finally => test.fail("long values parse failed");
+/// };
+///
+/// ShortValues:
+/// let mut app = AppSpec::new("tool");
+/// let verbose = app.flag_bool("--verbose", Some("-v"));
+/// let port = app.opt_int("--port", Some("-p"), 8080);
+/// let name = app.opt_string("--name", Some("-n"), nothing);
+/// let args: string[] = ["-v", "-p4242", "-n", "Bob"];
+/// compare parse(args, &app) {
+///     Success(parsed) => {
+///         test.assert(parsed.get_bool(verbose));
+///         test.eq::<int>(parsed.get_int(port).safe(), 4242);
+///         test.eq::<string>(parsed.get_string(name).safe(), "Bob");
+///     }
+///     finally => test.fail("short values parse failed");
+/// };
+///
+/// Positionals:
+/// let mut app = AppSpec::new("tool");
+/// let files = app.positionals_many("files");
+/// let args: string[] = ["src.sg", "--", "--literal"];
+/// compare parse(args, &app) {
+///     Success(parsed) => {
+///         let values = parsed.get_many(files).safe();
+///         test.eq::<uint>(values.__len(), 2:uint);
+///         test.eq::<string>(values[0], "src.sg");
+///         test.eq::<string>(values[1], "--literal");
+///     }
+///     finally => test.fail("positionals parse failed");
+/// };
+///
+/// Help:
+/// let mut app = AppSpec::new("tool");
+/// let args: string[] = ["--help"];
+/// compare parse(args, &app) {
+///     Help(usage) => test.eq::<string>(usage, "usage: tool [command] [options] [--] [args...]");
+///     finally => test.fail("help parse failed");
+/// };
+///
+/// Errors:
+/// let mut app = AppSpec::new("tool");
+/// let _ = app.flag_bool("--verbose", Some("-v"));
+/// let _ = app.opt_int("--port", Some("-p"), 8080);
+/// let _ = app.opt_string("--name", Some("-n"), nothing);
+/// let unknown: string[] = ["--unknown"];
+/// compare parse(unknown, &app) {
+///     ErrorDiag(err) => test.eq::<string>(err.message, "unknown flag: --unknown");
+///     finally => test.fail("unknown flag should fail");
+/// };
+/// let missing_long: string[] = ["--port", "--verbose"];
+/// compare parse(missing_long, &app) {
+///     ErrorDiag(err) => test.eq::<string>(err.message, "missing value for --port");
+///     finally => test.fail("missing long value should fail");
+/// };
+/// let missing_short: string[] = ["-n", "-v"];
+/// compare parse(missing_short, &app) {
+///     ErrorDiag(err) => test.eq::<string>(err.message, "missing value");
+///     finally => test.fail("missing short value should fail");
+/// };
+/// let invalid_int: string[] = ["--port", "nope"];
+/// compare parse(invalid_int, &app) {
+///     ErrorDiag(err) => test.eq::<string>(err.message, "invalid int for --port");
+///     finally => test.fail("invalid int should fail");
+/// };
+fn parser_behavior_contracts() -> nothing {
+    return nothing;
+}

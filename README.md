@@ -18,6 +18,12 @@ It gives you a small typed builder API for flags, options, subcommands, and posi
 
 Add `sigil` to `surge.toml`:
 
+```bash
+surge module add https://github.com/vovakirdan/sigil.git
+```
+
+And see `surge.toml` like this:
+
 ```toml
 [modules]
   [modules.sigil]

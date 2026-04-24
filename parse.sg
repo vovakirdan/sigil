@@ -58,14 +58,6 @@ fn usage_stub(app: &AppSpec) -> string {
     return out;
 }
 
-fn token_string(tok: &Token) -> string {
-    return compare tok {
-        Value(s) => clone(s);
-        Pos(s) => clone(s);
-        finally => "";
-    };
-}
-
 // apply defaults (root + cmd)
 fn apply_defaults(p: &mut Parsed, c: &CmdSpec) -> nothing {
     for i in 0..(len(c.opts) to int) {
@@ -106,6 +98,14 @@ fn push_pos_many(p: &mut Parsed, pid: uint32, s: &string) -> nothing {
         let _ = p.values.insert(pid, VManyString(arr));
     }
     return nothing;
+}
+
+fn value_from_token(t: &Token) -> string? {
+    return compare t {
+        Value(s) => Some(clone(s));
+        Pos(s) => Some(clone(s));
+        finally => nothing;
+    };
 }
 
 // helper: find opt in merged scope
@@ -237,9 +237,14 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                                     let missing_value_err = Error { message = "missing value for " + name, code = 1:uint };
                                     return ErrorDiag(missing_value_err); 
                                 }
-                                let vtok = toks[i + 1];
-                                let sval = token_string(vtok);
-                                // parse int
+                                let sval_opt = value_from_token(toks[i + 1]);
+                                let sval = compare sval_opt {
+                                    Some(v) => v;
+                                    nothing => {
+                                        let missing_value_err = Error { message = "missing value for " + name, code = 1:uint };
+                                        return ErrorDiag(missing_value_err);
+                                    }
+                                };
                                 if !is_int(&sval) {
                                     let invalid_int_err = Error { message = "invalid int for " + name, code = 1:uint };
                                     return ErrorDiag(invalid_int_err);
@@ -254,8 +259,14 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                                     let missing_value_err = Error { message = "missing value for " + name, code = 1:uint };
                                     return ErrorDiag(missing_value_err);
                                 }
-                                let vtok = toks[i + 1];
-                                let sval = token_string(vtok);
+                                let sval_opt = value_from_token(toks[i + 1]);
+                                let sval = compare sval_opt {
+                                    Some(v) => v;
+                                    nothing => {
+                                        let missing_value_err = Error { message = "missing value for " + name, code = 1:uint };
+                                        return ErrorDiag(missing_value_err);
+                                    }
+                                };
                                 out.set_string(o.id, sval);
                                 i = i + 2;
                                 continue;
@@ -280,8 +291,11 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                             OptKindEnum::Bool => { out.set_bool(o.id, true); i = i + 1; continue; }
                             OptKindEnum::Int => {
                                 if ((i + 1) >= n) { return ErrorDiag(Error { message = "missing value for -<flag>", code = 1 to uint }); }
-                                let vtok = toks[i + 1];
-                                let sval = token_string(vtok);
+                                let sval_opt = value_from_token(toks[i + 1]);
+                                let sval = compare sval_opt {
+                                    Some(v) => v;
+                                    nothing => return ErrorDiag(Error { message = "missing value for -<flag>", code = 1 to uint });
+                                };
                                 if !is_int(&sval) {
                                     let invalid_int_err = Error { message = "invalid int for -<flag>", code = 1:uint };
                                     return ErrorDiag(invalid_int_err);
@@ -293,8 +307,11 @@ pub fn parse(argv: string[], app: &AppSpec) -> Erring<Parsed, ParseDiag> {
                             }
                             OptKindEnum::String => {
                                 if ((i + 1) >= n) { return ErrorDiag(Error { message = "missing value", code = 1 to uint }); }
-                                let vtok = toks[i + 1];
-                                let sval = token_string(vtok);
+                                let sval_opt = value_from_token(toks[i + 1]);
+                                let sval = compare sval_opt {
+                                    Some(v) => v;
+                                    nothing => return ErrorDiag(Error { message = "missing value", code = 1 to uint });
+                                };
                                 out.set_string(o.id, sval);
                                 i = i + 2;
                                 continue;
